@@ -149,11 +149,35 @@ and the `meme/card` component deleted. It was written from the brief's topic lis
 mostly dating, gambling, education and philosophy. Rewriting copy for a section
 nobody asked for was the wrong trade.
 
+## Phase 7 — careers
+- [x] `/careers` and `/careers/<slug>`, listings read from the Roles tab of the
+      Google Sheet so a host can publish one without a developer
+- [x] CV upload (PDF/Word, 2MB) through `/api/careers` into a private Drive folder,
+      plus a speculative application that works when nothing is open
+- [x] Twelve-month retention promised on the privacy page — **deleted by hand, so it
+      is a promise kept by people rather than by software**
+- [x] Fixed two live defects in the shared sheet write path while in there: Sheets
+      formula injection (a message beginning `=IMPORTRANGE(` executed inside the
+      hosts' own spreadsheet) and a missing `LockService` around `appendRow`
+- [ ] **NOT YET PROVEN: that Apps Script accepts a ~2.8MB POST body.** Its incoming
+      payload limit is undocumented and the whole upload design rests on it. Send a
+      real 2MB PDF as base64 with curl before trusting the CV path in production.
+      If it fails, the fallbacks are a Drive resumable upload with a service account
+      or a signed direct-to-storage upload, and both are considerably more work.
+- [ ] Verify the formula-injection fix by hand against a real sheet. A fix nobody
+      has watched work is not a fix.
+- [ ] Decide whose Google account owns the CV folder — the files land in that
+      account's personal 15GB, alongside its Gmail.
+
 ## Deferred / not in scope
 - YouTube Data API — RSS covers 15 episodes with no key; only needed for view counts
 - Market ticker — removed from the design, `ticker/row` component left unused in Figma
 - `episode/card` and `sphere/tile` Figma components — superseded, still in the file
-- CMS for content — nothing on the site needs non-developer editing yet
+- CMS for content — still not warranted, but the premise has moved. Job listings DO
+  need non-developer editing, and they get it without a CMS: the Roles tab of the
+  show's Google Sheet, read on ISR by `lib/roles.ts`. That is the pattern to reach
+  for if anything else ever needs the same — a sheet the hosts already keep, not a
+  second system for them to log into.
 
 ## Raised and declined (do not re-litigate)
 Offered as cuts alongside the meme wall, kept deliberately:

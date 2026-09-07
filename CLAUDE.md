@@ -1,8 +1,8 @@
 # Memes & Markets — website
 
-Two-page marketing site (Home, About) for the Memes & Markets podcast. Hosts Keith D and
-Ben Leavitt, live Tuesdays & Thursdays. Structural model is tbpn.com: no nav bar,
-the wordmark is the header.
+Marketing site for the Memes & Markets podcast: Home, About, Partner, Careers and the two
+legal pages. Hosts Keith D and Ben Leavitt, live Tuesdays & Thursdays. Structural model
+is tbpn.com: no nav bar, the wordmark is the header.
 
 ## Where things live
 
@@ -14,6 +14,11 @@ the wordmark is the header.
 | Episode data | `lib/episodes.ts` | YouTube RSS on hourly ISR, no API key. Falls back to `content/episodes-fallback.json`. |
 | Feed parsing | `lib/feed.ts` | The URL and `parseFeed`. Imports no JSON on purpose, so plain Node can load it — see the note in the file. |
 | Newsletter | `lib/newsletter.ts` | Substack signup, proxied through `/api/subscribe` because the endpoint sends no CORS headers. Endpoint is undocumented; `lib/newsletter.test.ts` pins the response shapes. |
+| Job listings | `lib/roles.ts` | Read from the Roles tab of the show's Google Sheet on 5-minute ISR, so a host can publish a role without a developer. Falls back to `content/roles-fallback.json`. |
+| Role parsing | `lib/roles-sheet.ts` | The `Role` type, `slugify`, `parseRoles`. Imports nothing at all, so plain Node can load it — same reason as `feed.ts`. An unrecognised status falls back to **Draft**, i.e. invisible; that asymmetry is deliberate. |
+| Role fallback | `content/roles-fallback.json` | **Generated. Never hand-edit.** Run `npm run roles:refresh`. Ships empty on purpose: no roles open is the honest page, not a broken one. |
+| Applications | `lib/careers.ts` | Pure validator for the CV form. Checks the file's magic bytes rather than its mime type — a `.txt` renamed `.pdf` carries both labels happily. |
+| The Google Sheet | `scripts/sheet-webhook.gs` | One Apps Script deployment: enquiries in, applications + CVs in, job listings out. Setup is in the file header. `lib/sheet.ts` resolves the URL and secret. |
 | Episode fallback | `content/episodes-fallback.json` | **Generated. Never hand-edit.** Run `npm run episodes:refresh`; a scheduled Action keeps it current. |
 | Design file | Figma `qUhg8iR0L0TAOqv3QQ7pAM` | Pages: Foundations, Components, Home, About. |
 | Past decisions | `gstack-decision-search` | Architecture calls and their rationale. Query before re-litigating one. |
@@ -28,6 +33,13 @@ the wordmark is the header.
 3. **Every footer carries this verbatim:** "For education and entertainment only.
    Not financial, legal, tax, or investment advice."
 4. **Real episode titles only.** Pull from the feed. Never invent episode numbers.
+   The same goes for job listings: they come from the sheet. The one exception in
+   the repo is `e2e/fixtures/roles.json`, which never reaches a build.
+
+5. **Candidate data has a promise attached to it.** `app/privacy/page.tsx` says
+   applications and CVs are deleted after twelve months, by hand. If that changes,
+   the page is wrong until somebody changes it too. CVs live in a private Drive
+   folder whose sharing the Apps Script deliberately never touches.
 
 5. **`getEpisodes` never throws and never returns empty.** That is deliberate — a
    hero of real-but-old episodes beats an empty one — but it means a broken feed

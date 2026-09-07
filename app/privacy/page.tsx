@@ -13,9 +13,10 @@ export const metadata: Metadata = {
  * WHAT THIS PAGE IS AND IS NOT.
  *
  * Every claim below was written from the code rather than from a template: the
- * the one form is app/api/partner, the storage keys are the
- * two in lib/consent.ts and components/player/LivePlayer.tsx, and the third
- * parties are the hosts the CSP in next.config.ts actually permits. If any of
+ * two forms are app/api/partner and app/api/careers, the CV that the second one
+ * stores lands in Google Drive via scripts/sheet-webhook.gs, the storage keys
+ * are the two in lib/consent.ts and components/player/LivePlayer.tsx, and the
+ * third parties are the hosts the CSP in next.config.ts permits. If any of
  * that changes, this page is wrong until somebody changes it too — which is the
  * usual failure of a privacy policy and the reason for naming the files here.
  *
@@ -27,10 +28,12 @@ export const metadata: Metadata = {
  */
 export default function Privacy() {
   return (
-    <LegalPage eyebrow="Privacy" title="What we collect" updated="2026-08-17">
+    <LegalPage eyebrow="Privacy" title="What we collect" updated="2026-09-07">
       <LegalSection id="p-short" heading="The short version">
         <p>
-          One form on this site collects anything: the partnership enquiry form.
+          Two forms on this site collect anything: the partnership enquiry form, and the
+          careers application form. The careers one takes a CV if you send one, which is
+          the most personal thing this site handles — there is a section on it below.
           Subscribing to the newsletter is a link to Substack, so an address typed there
           is typed on their site and never reaches us. Nothing else asks you for
           information, and nothing on the page tracks you unless you agree to it first.
@@ -63,6 +66,37 @@ export default function Privacy() {
           It is used to reply to you and for nothing else. It is not added to a mailing
           list, not sold, and not shared with anyone outside the show. Ask us to delete it
           and we will.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="p-careers" heading="Job applications">
+        <p>
+          The form on the{" "}
+          <Link href="/careers" className="underline underline-offset-4">
+            careers page
+          </Link>{" "}
+          records what you type into it — your name, email address, where you are based, a
+          link if you give one, and what you wrote — along with which role you applied for
+          and the time it arrived. If you attach a CV, we keep the file itself.
+        </p>
+        <p>
+          The written part lands in a private Google Sheet that only the show&rsquo;s
+          hosts can open. The CV file is saved into a private Google Drive folder in the
+          same account. Neither is public and neither is shared with anyone outside the
+          show — the file is not reachable by link, so nobody who has not been given
+          access to that folder can open it.
+        </p>
+        <p>
+          <strong style={{ color: "var(--mm-text)" }}>
+            We keep an application for twelve months and then delete it, CV and all.
+          </strong>{" "}
+          If you want it gone sooner, email us and it is gone. That deletion is done by
+          hand rather than by a scheduled job, which is worth saying plainly: it is a
+          promise kept by people, not by software.
+        </p>
+        <p>
+          It is used to decide whether to talk to you, and for nothing else. It is not
+          added to a mailing list, not sold, and not passed to a recruiter.
         </p>
       </LegalSection>
 
@@ -114,6 +148,13 @@ export default function Privacy() {
           Following a link to a platform, obviously, takes you to them and their terms.
         </p>
         <p>
+          Google has a second role here, and a bigger one. Anything you send through the
+          partnership or careers forms — including a CV — is stored in Google Sheets and
+          Google Drive under the show&rsquo;s own Google account, which means it sits on
+          Google&rsquo;s servers under their terms, with them acting as a processor for
+          us. The job listings on the careers page are read back out of that same sheet.
+        </p>
+        <p>
           Your IP address is used briefly, in memory, to rate-limit the two forms so they
           cannot be abused. It is not stored for that purpose and is not associated with
           anything you submit.
@@ -123,8 +164,10 @@ export default function Privacy() {
       <LegalSection id="p-rights" heading="Your data, and getting rid of it">
         <p>
           Ask and we will tell you what we hold, correct it, or delete it. In practice the
-          only thing we hold is a partnership enquiry, if you sent one. For the
-          newsletter, unsubscribing from any issue is the fastest route.
+          only things we hold are a partnership enquiry and a job application, if you sent
+          either — and for an application that includes the CV file, which we will delete
+          on request rather than waiting out the twelve months. For the newsletter,
+          unsubscribing from any issue is the fastest route.
         </p>
         <p>
           Depending on where you live you may have stronger statutory rights than that —

@@ -1,5 +1,6 @@
 import { validate } from "@/lib/partner";
 import { clientKey, createRateLimiter } from "@/lib/rate-limit";
+import { sheetEndpoint } from "@/lib/sheet";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -7,9 +8,14 @@ export const dynamic = "force-dynamic";
 /**
  * Partnership and sponsorship enquiries, forwarded to a Google Sheet.
  *
- * The sheet is written by an Apps Script web app whose URL lives in
- * PARTNER_SHEET_WEBHOOK. That URL is a public write endpoint — anyone holding it
- * can append rows — so it never reaches the browser. See lib/partner.ts.
+ * The sheet is written by an Apps Script web app whose URL comes from
+ * lib/sheet.ts. That URL is a public write endpoint — anyone holding it can
+ * append rows — so it never reaches the browser. See lib/partner.ts.
+ *
+ * ONE DEPLOYMENT, SHARED WITH /api/careers, which is why the body carries a
+ * `list`. This route stays on the EDGE runtime and that one does not: the
+ * payload here is a few kilobytes of text, so edge is the right shape for it.
+ * The careers route carries a CV and explains its own choice in its header.
  *
  * Guards, in the order they run:
  *
@@ -87,14 +93,12 @@ export async function POST(request: Request) {
     return json(400, checked);
   }
 
-  const webhook = process.env.PARTNER_SHEET_WEBHOOK;
+  const { url: webhook, secret } = sheetEndpoint();
   if (!webhook) {
     // Not configured is a deployment mistake, not a visitor's problem. Loud in
     // the logs, and honest on the page — the alternative is a form that thanks
     // people for enquiries nobody will ever read.
-    console.error(
-      "[partner] PARTNER_SHEET_WEBHOOK is not set — the enquiry was NOT recorded.",
-    );
+    console.error("[partner] SHEET_WEBHOOK is not set — the enquiry was NOT recorded.");
     return json(503, {
       ok: false,
       message: "The form is not accepting messages right now. Please email us instead.",
@@ -107,10 +111,14 @@ export async function POST(request: Request) {
       headers: { "content-type": "application/json" },
       // The secret travels in the body, not a header: Apps Script drops custom
       // request headers across the 302 it answers with, so a header-based check
-      // would reject every genuine write. See scripts/partner-sheet.gs.
+      // would reject every genuine write. See scripts/sheet-webhook.gs.
       body: JSON.stringify({
+        // One deployment now serves this and /api/careers; the list picks the
+        // tab. An unknown or missing one falls through to Enquiries, which is
+        // what keeps a stale client working.
+        list: "enquiries",
         ...checked.enquiry,
-        secret: process.env.PARTNER_SHEET_SECRET ?? "",
+        secret,
         receivedAt: new Date().toISOString(),
       }),
       // Apps Script answers a POST with a 302 to script.googleusercontent.com and

@@ -436,35 +436,79 @@ test.describe("home", () => {
   /**
    * The newsletter signup.
    *
-   * There was a form here once, posting to /api/subscribe, which proxied to
-   * Substack. That is gone and is not coming back in that shape: Substack has no
-   * supported API for adding a subscriber, and the undocumented endpoint behind
-   * their embed sits behind Cloudflare bot management, which blocks every
-   * server-side POST. A framed embed and a collect-then-import sheet were both
-   * built and both rejected — the first took the site's design with it, the
-   * second put a standing manual chore on somebody twice a week.
+   * It is a form again, and this time it posts from the visitor's browser rather
+   * than through a route of ours. That is not a preference: Substack refuses
+   * non-browser clients outright — curl is refused from a residential
+   * connection, so no serverless function will ever manage it — while accepting
+   * a form-encoded body from a browser with no preflight at all.
    *
-   * So the assertion is deliberately small: the block sends people somewhere real
-   * and off-site. The failure it guards against is a signup that looks available
-   * and quietly goes nowhere, which is what every version of this has done.
+   * BOTH ASSERTIONS BELOW GUARD SOMETHING THAT FAILS SILENTLY. The response is
+   * opaque by design, so the page cannot tell a delivered signup from a rejected
+   * one; if the request stops going out, or goes out as JSON and gets killed by
+   * a preflight, everything on screen still says it worked. Only a test that
+   * watches the wire can see it.
+   *
+   * The route interception is not optional either. A real POST from a test run
+   * would put a fake address on a real mailing list.
    */
-  test("the newsletter block links out to Substack", async ({ page }) => {
+  test("the newsletter box posts the address to Substack", async ({ page }) => {
     await page.goto("/");
 
-    const cta = page
-      .locator("footer")
-      .getByRole("link", { name: /subscribe on substack/i });
-    await cta.scrollIntoViewIfNeeded();
-    await expect(cta).toBeVisible();
+    const posts: { url: string; body: string; contentType: string }[] = [];
+    await page.route("**/api/v1/free", async (route) => {
+      const request = route.request();
+      posts.push({
+        url: request.url(),
+        body: request.postData() ?? "",
+        contentType: request.headers()["content-type"] ?? "",
+      });
+      await route.fulfill({ status: 200, body: "{}" });
+    });
 
-    // Off-site, and to the profile rather than the custom domain the site now
-    // occupies — pointing it at memesandmarkets.com would be a link to this page.
-    await expect(cta).toHaveAttribute("href", /^https:\/\/substack\.com\/@/);
-    await expect(cta).toHaveAttribute("target", "_blank");
-    await expect(cta).toHaveAttribute("rel", /noopener/);
+    const form = page.locator("footer form");
+    await form.scrollIntoViewIfNeeded();
+    await form.getByPlaceholder("name@email.com").fill("reader@example.com");
+    await form.getByRole("button", { name: /subscribe/i }).click();
 
-    // No form left behind to half-work.
-    await expect(page.locator("footer form")).toHaveCount(0);
+    // "Gone over", not "subscribed" — the copy is not allowed to claim more than
+    // an opaque response supports.
+    await expect(page.getByText(/gone over/i)).toBeVisible();
+
+    expect(posts).toHaveLength(1);
+    const post = posts[0];
+    // Narrowing, not a second assertion: toHaveLength has already failed the test
+    // if this is missing, and tsc cannot see that.
+    if (!post) throw new Error("the signup sent nothing at all");
+    // A substack.com host, never the custom domain the site now occupies: that
+    // would post the signup straight back to this page.
+    expect(post.url).toMatch(/^https:\/\/[^/]+\.substack\.com\/api\/v1\/free$/);
+    // Form-encoded, NOT JSON. The safelisted content type is the only reason
+    // this request escapes the browser at all.
+    expect(post.contentType).toMatch(/^application\/x-www-form-urlencoded/);
+    expect(post.body).toContain("email=reader%40example.com");
+  });
+
+  /**
+   * The address check has to happen here, because it cannot happen anywhere else.
+   * Substack rejects a malformed address into an opaque response we cannot read,
+   * so anything that gets past this point is reported to the visitor as success.
+   */
+  test("a malformed address is refused before anything is sent", async ({ page }) => {
+    await page.goto("/");
+
+    let sent = 0;
+    await page.route("**/api/v1/free", async (route) => {
+      sent += 1;
+      await route.fulfill({ status: 200, body: "{}" });
+    });
+
+    const form = page.locator("footer form");
+    await form.scrollIntoViewIfNeeded();
+    await form.getByPlaceholder("name@email.com").fill("reader@example");
+    await form.getByRole("button", { name: /subscribe/i }).click();
+
+    await expect(page.getByText(/does not look like an email/i)).toBeVisible();
+    expect(sent).toBe(0);
   });
 
   test("does not scroll sideways at 390px", async ({ page }) => {
@@ -488,8 +532,22 @@ test.describe("home", () => {
  * Each of these is a separate way home, and they are tested separately because
  * each is one someone will reach for by reflex.
  */
+/**
+ * Click a link in the footer, scoped to the footer.
+ *
+ * The scoping is the point. These locators used to search the whole page for a
+ * link called "Privacy" or "About", which was safe only while no other page
+ * carried one — and /careers now renders role cards with titles of their own.
+ * Naming the landmark says what the test is actually about, and stops a future
+ * listing called "Terms of the deal" from making it ambiguous.
+ */
+async function clickInFooter(page: Page, name: string) {
+  const footer = page.getByRole("contentinfo");
+  await footer.getByRole("link", { name, exact: true }).first().click();
+}
+
 test.describe("navigation", () => {
-  for (const from of ["/about", "/partner"]) {
+  for (const from of ["/about", "/partner", "/careers"]) {
     test(`the header lockup on ${from} goes home`, async ({ page }) => {
       await page.goto(from);
       await page
@@ -509,13 +567,29 @@ test.describe("navigation", () => {
     });
   }
 
-  test("the footer reaches both subpages", async ({ page }) => {
+  /**
+   * Scoped to the footer, which it was not before. These locators used to search
+   * the whole page for a link called "About" or "Partner" — safe while no other
+   * page carried one, and a trap the moment /careers grew role cards with titles
+   * of their own. Naming the landmark says what the test is actually about.
+   */
+  test("the footer reaches every other page", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "About", exact: true }).click();
-    await expect(page).toHaveURL(/\/about$/);
 
-    await page.getByRole("link", { name: "Partner", exact: true }).click();
-    await expect(page).toHaveURL(/\/partner$/);
+    // Chained rather than returning home between each: the footer is on every
+    // page, so walking About -> Partner -> Careers exercises it three times AND
+    // proves each page carries it. An earlier version used page.goBack(), which
+    // races — the next click can land while the back navigation is still in
+    // flight, and the assertion then sees the homepage.
+    const pages: [label: string, path: string][] = [
+      ["About", "/about"],
+      ["Partner", "/partner"],
+      ["Careers", "/careers"],
+    ];
+    for (const [label, path] of pages) {
+      await clickInFooter(page, label);
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+    }
   });
 
   /**
@@ -538,14 +612,14 @@ test.describe("navigation", () => {
    */
   test("the footer reaches the legal pages", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "Privacy", exact: true }).first().click();
+    await clickInFooter(page, "Privacy");
     await expect(page).toHaveURL(/\/privacy$/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "What we collect",
     );
 
     await page.goto("/");
-    await page.getByRole("link", { name: "Terms", exact: true }).first().click();
+    await clickInFooter(page, "Terms");
     await expect(page).toHaveURL(/\/terms$/);
   });
 
@@ -591,7 +665,7 @@ test.describe("seo", () => {
   test("every route is its own canonical, and the homepage is not /index", async ({
     page,
   }) => {
-    for (const path of ["/", "/about", "/partner", "/privacy", "/terms"]) {
+    for (const path of ["/", "/about", "/partner", "/careers", "/privacy", "/terms"]) {
       await page.goto(path);
       const canonical = await page
         .locator('link[rel="canonical"]')
@@ -881,5 +955,237 @@ test.describe("cookie consent", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     expect((await consentState(page)).stored).toBe("denied");
+  });
+});
+
+/**
+ * The careers section.
+ *
+ * NOTHING IN HERE MAY EVER POST A REAL CV. Every test that submits intercepts
+ * /api/careers and captures the body instead — a real POST from a test run would
+ * put a fake person, and a real file, into the hosts' Drive folder.
+ *
+ * The listings come from e2e/fixtures/roles.json, loaded into ROLES_FIXTURE by
+ * playwright.config.ts. getRoles() runs on the server, so page.route() cannot
+ * reach it, and the committed fallback ships empty because the show is not
+ * actually hiring. The fixture holds one Open role and one Closed one, because
+ * the closed page is its own behaviour and is the one that will rot unwatched.
+ */
+test.describe("careers", () => {
+  /** Capture what the form sends, and answer as the route would. */
+  async function stubApply(page: Page) {
+    const sent: Record<string, unknown>[] = [];
+    await page.route("**/api/careers", async (route) => {
+      sent.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, json: { ok: true } });
+    });
+    return sent;
+  }
+
+  async function fillApplication(page: Page) {
+    await page.getByLabel("Your name").fill("Sam Rivera");
+    await page.getByLabel("Email", { exact: true }).fill("sam@example.com");
+    await page.getByLabel(/why this role|what you do/i).fill("I cut daily shows.");
+    await page.getByRole("checkbox").check();
+  }
+
+  test("the index lists an open role and reaches its page", async ({ page }) => {
+    await page.goto("/careers");
+    await page.getByRole("link", { name: /Associate Producer/i }).click();
+
+    await expect(page).toHaveURL(/\/careers\/associate-producer$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Associate Producer" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /send application/i })).toBeVisible();
+  });
+
+  /**
+   * The invariant behind the whole page: there is always a way to apply. It has
+   * to hold when roles are open, which is the case the fixture puts it in, and
+   * when none are — which is production today.
+   */
+  test("a general application sits on the index alongside the open roles", async ({
+    page,
+  }) => {
+    await page.goto("/careers");
+    await expect(page.getByRole("heading", { name: /none of these fit/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /send application/i })).toBeVisible();
+  });
+
+  test("an application from a role page carries that role's slug", async ({ page }) => {
+    const sent = await stubApply(page);
+    await page.goto("/careers/associate-producer");
+
+    await fillApplication(page);
+    await page.getByLabel(/linkedin/i).fill("https://example.com/sam");
+    await page.getByRole("button", { name: /send application/i }).click();
+
+    await expect(page.getByText(/that is with us/i)).toBeVisible();
+    expect(sent).toHaveLength(1);
+    const body = sent[0];
+    // Narrowing, not a second assertion: toHaveLength has already failed the
+    // test if this is missing, and tsc cannot see that.
+    if (!body) throw new Error("the form sent nothing at all");
+    expect(body.roleSlug).toBe("associate-producer");
+    expect(body.consent).toBe(true);
+    // No file attached means no cv key, not an empty one — the validator treats
+    // a present-but-empty cv object as a failed upload.
+    expect(body.cv).toBeUndefined();
+  });
+
+  test("an application from the index carries no role at all", async ({ page }) => {
+    const sent = await stubApply(page);
+    await page.goto("/careers");
+
+    await fillApplication(page);
+    await page.getByLabel(/linkedin/i).fill("https://example.com/sam");
+    await page.getByRole("button", { name: /send application/i }).click();
+
+    await expect(page.getByText(/that is with us/i)).toBeVisible();
+    expect(sent[0]?.roleSlug).toBe("");
+  });
+
+  test("a real PDF goes up base64-encoded", async ({ page }) => {
+    const sent = await stubApply(page);
+    await page.goto("/careers/associate-producer");
+
+    await fillApplication(page);
+    await page.getByLabel(/your cv/i).setInputFiles({
+      name: "sam-rivera.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\nnot really a pdf, but it starts like one\n"),
+    });
+    await page.getByRole("button", { name: /send application/i }).click();
+
+    await expect(page.getByText(/that is with us/i)).toBeVisible();
+    const cv = sent[0]?.cv as { type: string; data: string; name: string } | undefined;
+    if (!cv) throw new Error("the CV did not travel with the application");
+    expect(cv.type).toBe("application/pdf");
+    expect(cv.name).toBe("sam-rivera.pdf");
+    // "JVBER" is base64 for "%PDF". This is the end-to-end proof of the encoding
+    // contract lib/careers.ts checks the other end of, and it costs 200 bytes.
+    expect(cv.data.startsWith("JVBER")).toBe(true);
+  });
+
+  /**
+   * The client-side size check is a COURTESY, not a guard — the request is
+   * trivially replayable with curl, and /api/careers re-checks the decoded size.
+   * What this proves is that the courtesy works: nobody sits through a
+   * three-megabyte upload before being told no.
+   */
+  test("an oversized file never leaves the browser", async ({ page }) => {
+    const sent = await stubApply(page);
+    await page.goto("/careers/associate-producer");
+
+    await fillApplication(page);
+    await page.getByLabel(/your cv/i).setInputFiles({
+      name: "huge.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.alloc(3 * 1024 * 1024),
+    });
+
+    // Rejected at the moment it was chosen, before a byte was sent anywhere.
+    await expect(page.getByText(/over 2MB/i)).toBeVisible();
+    expect(sent).toHaveLength(0);
+
+    // And it stays out of the request. The form still submits — the remaining
+    // fields are fine and the server has the last word on whether an
+    // application with neither CV nor link is one — but the three megabytes are
+    // not in it.
+    await page.getByRole("button", { name: /send application/i }).click();
+    expect(sent[0]?.cv).toBeUndefined();
+  });
+
+  test("a text file wearing a document's name is refused", async ({ page }) => {
+    const sent = await stubApply(page);
+    await page.goto("/careers/associate-producer");
+
+    await fillApplication(page);
+    await page.getByLabel(/your cv/i).setInputFiles({
+      name: "cv.rtf",
+      mimeType: "text/plain",
+      buffer: Buffer.from("hello world"),
+    });
+
+    await expect(page.getByText(/PDF or Word/i).first()).toBeVisible();
+    expect(sent).toHaveLength(0);
+  });
+
+  test("the consent box is required before anything is sent", async ({ page }) => {
+    const sent = await stubApply(page);
+    await page.goto("/careers/associate-producer");
+
+    await page.getByLabel("Your name").fill("Sam Rivera");
+    await page.getByLabel("Email", { exact: true }).fill("sam@example.com");
+    await page.getByLabel(/linkedin/i).fill("https://example.com/sam");
+    await page.getByLabel(/why this role/i).fill("I cut daily shows.");
+    // Deliberately not ticked.
+    await page.getByRole("button", { name: /send application/i }).click();
+
+    await expect(page.getByText(/tick the box/i)).toBeVisible();
+    // Nothing sent, which is the half that matters: a CV must not reach our own
+    // server before somebody has agreed we may keep it. The server refuses this
+    // too, but by then it is holding the file.
+    expect(sent).toHaveLength(0);
+  });
+
+  /**
+   * The honeypot is checked server-side, so a browser test cannot prove the
+   * cheerful 200 without testing its own stub. What it CAN prove is the half
+   * that has to be true in the page: that no person will ever fill this in.
+   */
+  test("the honeypot is hidden from sight, assistive tech and the tab order", async ({
+    page,
+  }) => {
+    await page.goto("/careers");
+    // Scoped to main: the newsletter box in the footer carries a honeypot of its
+    // own, by the same name and for the same reason.
+    const pot = page.locator('main input[name="company"]');
+    await expect(pot).toHaveCount(1);
+    await expect(pot).toBeHidden();
+    await expect(pot).toHaveAttribute("aria-hidden", "true");
+    await expect(pot).toHaveAttribute("tabindex", "-1");
+  });
+
+  /**
+   * A closed role is a PAGE, not a 404. That URL is the one already pasted into
+   * LinkedIn posts and group chats, and it goes on being clicked for months.
+   */
+  test("a closed role still answers, and tells Google not to index it", async ({
+    page,
+  }) => {
+    const response = await page.goto("/careers/clips-editor");
+    expect(response?.status()).toBe(200);
+
+    await expect(page.getByText(/this one has closed/i)).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      "content",
+      /noindex/,
+    );
+    // No JobPosting markup on a listing that has stopped accepting applications:
+    // Google's policy asks for it to come off, and leaving it is a manual-action
+    // risk rather than merely stale.
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+    // But there is still somewhere to go, which is the whole reason it is a page.
+    await expect(page.getByRole("button", { name: /send application/i })).toBeVisible();
+  });
+
+  test("an open role carries JobPosting markup", async ({ page }) => {
+    await page.goto("/careers/associate-producer");
+    const ld = await page
+      .locator('script[type="application/ld+json"]')
+      .first()
+      .textContent();
+    const data = JSON.parse(ld ?? "{}");
+    expect(data["@type"]).toBe("JobPosting");
+    expect(data.title).toBe("Associate Producer");
+    // Free text cannot become a structured amount honestly. See lib/schema.tsx.
+    expect(data.baseSalary).toBeUndefined();
+  });
+
+  test("an unknown slug is a 404", async ({ page }) => {
+    const response = await page.goto("/careers/not-a-role");
+    expect(response?.status()).toBe(404);
   });
 });
