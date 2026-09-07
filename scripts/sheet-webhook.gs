@@ -47,7 +47,10 @@
  *     this whole file.
  *
  *  5. Set SHARED_SECRET below to a long random string, and CV_FOLDER_ID to the
- *     id from step 2.
+ *     id from step 2. If you would rather not read an id out of a URL, set it
+ *     aside for a moment: run `findFolderId` after step 6 and it prints the id
+ *     straight from Drive, which cannot pick up the account index or the
+ *     ?usp= query the address bar carries.
  *
  *  6. AUTHORISE THE DRIVE PERMISSION. In the editor's function dropdown pick
  *     `authoriseMe`, press Run, and accept the consent screen. It creates
@@ -405,6 +408,56 @@ function reply(payload) {
 }
 
 /**
+ * Print the id of every folder whose name matches, so CV_FOLDER_ID can be copied
+ * out of a log rather than out of a URL.
+ *
+ * WHY THIS EXISTS. Reading the id out of the address bar is the documented way,
+ * and it is the step that goes wrong. The URL carries an account index in the
+ * middle (/drive/u/0/folders/...) and a query on the end (?usp=drive_link), and
+ * both get copied along with the id. Worse, a Drive SHORTCUT to a folder has its
+ * own separate id and looks identical in the address bar — getFolderById on a
+ * shortcut fails with the same "No item with the given ID could be found" as a
+ * plain typo, so the mistake and the misdiagnosis arrive together.
+ *
+ * The ids printed here come from Drive itself, so none of that can happen.
+ *
+ * Set NAME_CONTAINS to part of the folder name, pick findFolderId in the
+ * dropdown, press Run, and read the Execution log. Running it also triggers the
+ * Drive consent screen if this deployment has never been authorised, which is
+ * the other half of the same problem.
+ */
+function findFolderId() {
+  var NAME_CONTAINS = "CV";
+
+  // Escaped for Drive's query language, not for JavaScript: an apostrophe in a
+  // folder name would otherwise close the quoted term mid-query.
+  var escaped = NAME_CONTAINS.replace(/'/g, "\\'");
+  var found = DriveApp.searchFolders(
+    "title contains '" + escaped + "' and trashed = false",
+  );
+
+  var n = 0;
+  while (found.hasNext()) {
+    var folder = found.next();
+    n++;
+    Logger.log("[" + n + "] " + folder.getName());
+    Logger.log("      id:  " + folder.getId());
+    Logger.log("      url: " + folder.getUrl());
+  }
+
+  if (n === 0) {
+    Logger.log("No folder found with '" + NAME_CONTAINS + "' in its name.");
+    Logger.log(
+      "Either it does not exist yet, or it belongs to a different Google account " +
+        "than the one this script runs as — check the account shown top right.",
+    );
+  } else {
+    Logger.log("");
+    Logger.log("Paste the id above into CV_FOLDER_ID, then run checkSetup.");
+  }
+}
+
+/**
  * Run this from the editor when something is not arriving. It writes nothing.
  *
  * It exists because the failure it diagnoses is invisible from the outside: the
@@ -444,11 +497,15 @@ function checkSetup() {
   Logger.log("Tab " + ROLES_SHEET + ": " + (book.getSheetByName(ROLES_SHEET) ? "present" : "MISSING — /careers cannot list anything without it"));
 
   if (problems.length === 0) {
-    Logger.log("
-No problems found. If applications are still not arriving, the deployment is probably running an older version of this file: Deploy -> Manage deployments -> edit -> New version.");
+    Logger.log("");
+    Logger.log(
+      "No problems found. If applications are still not arriving, the deployment is " +
+        "probably running an older version of this file: Deploy -> Manage deployments " +
+        "-> edit -> New version.",
+    );
   } else {
-    Logger.log("
-" + problems.length + " problem(s) found:");
+    Logger.log("");
+    Logger.log(problems.length + " problem(s) found:");
     for (let i = 0; i < problems.length; i++) Logger.log("  " + (i + 1) + ". " + problems[i]);
   }
 }
