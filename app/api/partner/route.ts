@@ -134,6 +134,34 @@ export async function POST(request: Request) {
         message: "That did not send. Please try again, or email us.",
       });
     }
+
+    // The status code is not the answer: Apps Script replies through
+    // ContentService, which cannot set one, so every reply is a 200 — including
+    // the ones where doPost caught an exception. This route had the same silent
+    // failure as /api/careers, where it was found; see the longer note there.
+    let upstream: { ok?: boolean; error?: string };
+    try {
+      upstream = (await res.json()) as { ok?: boolean; error?: string };
+    } catch {
+      console.error(
+        "[partner] the sheet webhook answered something that was not JSON — check the deployment's access setting.",
+      );
+      return json(502, {
+        ok: false,
+        message: "That did not send. Please try again, or email us.",
+      });
+    }
+
+    if (!upstream.ok) {
+      console.error(
+        `[partner] the sheet refused the write: ${upstream.error ?? "no reason given"}`,
+      );
+      return json(502, {
+        ok: false,
+        message: "That did not send. Please try again, or email us.",
+      });
+    }
+
     return json(200, { ok: true });
   } catch (err) {
     console.error(

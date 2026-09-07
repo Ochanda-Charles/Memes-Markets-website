@@ -199,6 +199,11 @@ function doPost(e) {
 
     return reply({ ok: true });
   } catch (err) {
+    // Logged as well as returned. ContentService cannot set an HTTP status, so
+    // this reply reaches the site as a 200 carrying ok:false — the site reads
+    // the body and tells the person it did not send, and Executions in the Apps
+    // Script editor is where the actual reason is legible.
+    console.error("doPost failed: " + String(err));
     return reply({ ok: false, error: String(err) });
   } finally {
     lock.releaseLock();
@@ -231,11 +236,27 @@ function appendSafely(sheet, values) {
  * a folder inherits that folder's sharing, which step 3 left Restricted. Calling
  * setSharing(ANYONE_WITH_LINK) on a folder of CVs is how somebody's home address
  * and phone number end up in a search index.
+ *
+ * IT CATCHES ITS OWN FAILURES, and the reason is worth stating. This function
+ * used to be allowed to throw, which aborted the whole write — so a wrong
+ * CV_FOLDER_ID, or a deployment that had not been re-authorised for Drive, threw
+ * away the candidate's name, address, message and link along with the file. The
+ * first real application sent to this script was lost exactly that way.
+ *
+ * The application is worth more than the attachment. A row that lands with
+ * "UPLOAD FAILED" in the CV column is a person somebody can still email; a row
+ * that never lands is nobody at all.
  */
 function saveCv(body) {
-  const bytes = Utilities.base64Decode(body.cv.data);
-  const blob = Utilities.newBlob(bytes, body.cv.type, cvName(body));
-  return DriveApp.getFolderById(CV_FOLDER_ID).createFile(blob).getUrl();
+  try {
+    const bytes = Utilities.base64Decode(body.cv.data);
+    const blob = Utilities.newBlob(bytes, body.cv.type, cvName(body));
+    return DriveApp.getFolderById(CV_FOLDER_ID).createFile(blob).getUrl();
+  } catch (err) {
+    // Executions in the Apps Script editor is where this shows up.
+    console.error("saveCv failed: " + String(err));
+    return "UPLOAD FAILED — ask them to email it. Reason: " + String(err);
+  }
 }
 
 /**
@@ -381,6 +402,55 @@ function reply(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
     ContentService.MimeType.JSON,
   );
+}
+
+/**
+ * Run this from the editor when something is not arriving. It writes nothing.
+ *
+ * It exists because the failure it diagnoses is invisible from the outside: the
+ * script catches its own exceptions and answers 200 either way, so a wrong
+ * folder id or a missing Drive authorisation looks, from the sheet, like a form
+ * nobody used. Select `checkSetup` in the function dropdown, press Run, and read
+ * the Execution log underneath.
+ */
+function checkSetup() {
+  const problems = [];
+
+  if (!SHARED_SECRET || SHARED_SECRET === "change-me-to-a-long-random-string") {
+    problems.push("SHARED_SECRET is still the placeholder. Set it, and set SHEET_SECRET in Vercel to the same string.");
+  }
+
+  if (!CV_FOLDER_ID || CV_FOLDER_ID === "paste-the-folder-id-here") {
+    problems.push("CV_FOLDER_ID is still the placeholder. Step 2 at the top of this file says where to find it.");
+  } else {
+    try {
+      const folder = DriveApp.getFolderById(CV_FOLDER_ID);
+      Logger.log("Drive folder OK: " + folder.getName());
+    } catch (err) {
+      // Two very different faults with one symptom. "not found" is usually the
+      // wrong id, or an id copied from a shortcut rather than the folder itself;
+      // anything mentioning permission or authorisation means this deployment
+      // has never been authorised for Drive, which is step 6.
+      problems.push("CV_FOLDER_ID does not resolve: " + String(err));
+      problems.push("If that mentions permission or authorisation, run authoriseMe and then redeploy via Manage deployments.");
+    }
+  }
+
+  const book = SpreadsheetApp.getActiveSpreadsheet();
+  for (const key in LISTS) {
+    const name = LISTS[key].sheet;
+    Logger.log("Tab " + name + ": " + (book.getSheetByName(name) ? "present" : "missing (it will be created on first write)"));
+  }
+  Logger.log("Tab " + ROLES_SHEET + ": " + (book.getSheetByName(ROLES_SHEET) ? "present" : "MISSING — /careers cannot list anything without it"));
+
+  if (problems.length === 0) {
+    Logger.log("
+No problems found. If applications are still not arriving, the deployment is probably running an older version of this file: Deploy -> Manage deployments -> edit -> New version.");
+  } else {
+    Logger.log("
+" + problems.length + " problem(s) found:");
+    for (let i = 0; i < problems.length; i++) Logger.log("  " + (i + 1) + ". " + problems[i]);
+  }
 }
 
 /**

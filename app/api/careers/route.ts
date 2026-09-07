@@ -188,6 +188,45 @@ export async function POST(request: Request) {
         message: "That did not send. Please try again, or email us.",
       });
     }
+
+    /**
+     * THE STATUS CODE IS NOT THE ANSWER. Apps Script replies through
+     * ContentService, which has no way to set one — every reply is a 200,
+     * including the ones where doPost caught an exception and returned
+     * { ok: false }. Checking res.ok alone means a script that refused the
+     * write, or threw on the Drive call, is reported to the candidate as
+     * "that is with us" while nothing reaches the sheet.
+     *
+     * That is exactly how the first real application went missing. The body is
+     * the only place the truth is.
+     */
+    let upstream: { ok?: boolean; error?: string };
+    try {
+      upstream = (await res.json()) as { ok?: boolean; error?: string };
+    } catch {
+      // Not JSON at all is usually Google's own sign-in or error page, which
+      // means the deployment is not reachable as configured.
+      console.error(
+        "[careers] the sheet webhook answered something that was not JSON — check the deployment's access setting.",
+      );
+      return json(502, {
+        ok: false,
+        message: "That did not send. Please try again, or email us.",
+      });
+    }
+
+    if (!upstream.ok) {
+      // The script's own reason, verbatim: "unauthorised" means the secret does
+      // not match, anything else is the exception it caught.
+      console.error(
+        `[careers] the sheet refused the write: ${upstream.error ?? "no reason given"}`,
+      );
+      return json(502, {
+        ok: false,
+        message: "That did not send. Please try again, or email us.",
+      });
+    }
+
     return json(200, { ok: true });
   } catch (err) {
     console.error(
