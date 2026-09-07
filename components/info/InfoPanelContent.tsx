@@ -1,5 +1,5 @@
 import { LiveCta } from "@/components/ui/LiveCta";
-import { NewsletterCta } from "@/components/ui/NewsletterCta";
+import { NewsletterForm } from "@/components/ui/NewsletterForm";
 import { PlatformIcon } from "@/components/ui/PlatformIcon";
 import { HOST_LIST } from "@/content/hosts";
 import { PLATFORMS } from "@/content/platforms";
@@ -92,7 +92,7 @@ export function InfoPanelContent() {
             <p className="type-body-md" style={{ color: "var(--mm-text-2)" }}>
               What actually moved, twice a week, in the time it takes to finish a coffee.
             </p>
-            <NewsletterCta block />
+            <NewsletterForm block />
           </div>
         </div>
       </section>

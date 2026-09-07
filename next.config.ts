@@ -67,10 +67,14 @@ const csp = [
   "font-src 'self'",
   // The Twitch player's own requests happen inside the iframe, under its own
   // origin, so they are not governed by this.
-  `connect-src 'self' ${GA_HOSTS.join(" ")}${isDev ? " ws: wss:" : ""}`,
-  // Twitch for the live player; Substack for the newsletter signup, which is
-  // their embed page rather than a form of ours — see components/ui/SubstackEmbed.
-  "frame-src https://player.twitch.tv https://*.twitch.tv https://*.substack.com",
+  // Substack carries the newsletter signup. The POST goes straight from the
+  // visitor's browser to their endpoint because no server of ours is permitted
+  // to make it — Cloudflare refuses non-browser clients. See lib/newsletter.ts.
+  `connect-src 'self' https://*.substack.com ${GA_HOSTS.join(" ")}${isDev ? " ws: wss:" : ""}`,
+  // Twitch for the live player, and nothing else. Substack was here for the
+  // framed embed; that component is gone and the signup is our own form now, so
+  // the permission went with it.
+  "frame-src https://player.twitch.tv https://*.twitch.tv",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
