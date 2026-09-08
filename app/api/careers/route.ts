@@ -71,6 +71,52 @@ function json(status: number, body: Record<string, unknown>, headers?: HeadersIn
   });
 }
 
+/**
+ * Read the body, refusing to hold more than `cap` bytes of it.
+ *
+ * THE CONTENT-LENGTH CHECK ABOVE CANNOT ENFORCE THIS, and that is the whole
+ * reason this exists. That header is supplied by the client and is optional: a
+ * request using chunked transfer encoding omits it, `Number(null ?? 0) > cap`
+ * is then false, and the guard waves the request straight through to a
+ * request.json() that buffers however much arrives. Measured, not assumed — a
+ * 4MB body sent with `Transfer-Encoding: chunked` skipped the 413 entirely and
+ * was read in full before validate() caught it on the decoded size.
+ *
+ * Counting bytes off the stream is the check that cannot be lied to. Decoding
+ * incrementally rather than collecting chunks means the cap bounds what is held
+ * in memory, not just what is accepted.
+ *
+ * Returns null when the cap is exceeded; the stream is cancelled at that point,
+ * so the rest of the upload is never read.
+ */
+async function readCapped(request: Request, cap: number): Promise<string | null> {
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > cap) {
+        await reader.cancel();
+        return null;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch {
+    // A truncated or aborted upload. Treated as unreadable rather than as a
+    // size failure, which is what the caller's JSON.parse will report.
+    return "";
+  }
+
+  return text + decoder.decode();
+}
+
 /** A missing Origin is allowed through: non-browser clients omit it. */
 function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
@@ -100,9 +146,18 @@ export async function POST(request: Request) {
     return json(403, { ok: false, message: "Wrong origin." });
   }
 
-  // Before the body is buffered, which is the whole point: this is what stops a
-  // four-megabyte upload from ever being read into memory.
+  // A free early-out when the header is present and honest. It is NOT the
+  // enforcement — see readCapped, and the note on it for why.
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) {
+    return json(413, {
+      ok: false,
+      message: "That file is too big. Send one under 2MB, or send a link instead.",
+      field: "cv",
+    });
+  }
+
+  const raw = await readCapped(request, MAX_BODY);
+  if (raw === null) {
     return json(413, {
       ok: false,
       message: "That file is too big. Send one under 2MB, or send a link instead.",
@@ -112,7 +167,7 @@ export async function POST(request: Request) {
 
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return json(400, { ok: false, message: "Could not read that request." });
   }
