@@ -436,79 +436,35 @@ test.describe("home", () => {
   /**
    * The newsletter signup.
    *
-   * It is a form again, and this time it posts from the visitor's browser rather
-   * than through a route of ours. That is not a preference: Substack refuses
-   * non-browser clients outright — curl is refused from a residential
-   * connection, so no serverless function will ever manage it — while accepting
-   * a form-encoded body from a browser with no preflight at all.
+   * There was a form here once, posting to /api/subscribe, which proxied to
+   * Substack. That is gone and is not coming back in that shape: Substack has no
+   * supported API for adding a subscriber, and the undocumented endpoint behind
+   * their embed sits behind Cloudflare bot management, which blocks every
+   * server-side POST. A framed embed and a collect-then-import sheet were both
+   * built and both rejected — the first took the site's design with it, the
+   * second put a standing manual chore on somebody twice a week.
    *
-   * BOTH ASSERTIONS BELOW GUARD SOMETHING THAT FAILS SILENTLY. The response is
-   * opaque by design, so the page cannot tell a delivered signup from a rejected
-   * one; if the request stops going out, or goes out as JSON and gets killed by
-   * a preflight, everything on screen still says it worked. Only a test that
-   * watches the wire can see it.
-   *
-   * The route interception is not optional either. A real POST from a test run
-   * would put a fake address on a real mailing list.
+   * So the assertion is deliberately small: the block sends people somewhere real
+   * and off-site. The failure it guards against is a signup that looks available
+   * and quietly goes nowhere, which is what every version of this has done.
    */
-  test("the newsletter box posts the address to Substack", async ({ page }) => {
+  test("the newsletter block links out to Substack", async ({ page }) => {
     await page.goto("/");
 
-    const posts: { url: string; body: string; contentType: string }[] = [];
-    await page.route("**/api/v1/free", async (route) => {
-      const request = route.request();
-      posts.push({
-        url: request.url(),
-        body: request.postData() ?? "",
-        contentType: request.headers()["content-type"] ?? "",
-      });
-      await route.fulfill({ status: 200, body: "{}" });
-    });
+    const cta = page
+      .locator("footer")
+      .getByRole("link", { name: /subscribe on substack/i });
+    await cta.scrollIntoViewIfNeeded();
+    await expect(cta).toBeVisible();
 
-    const form = page.locator("footer form");
-    await form.scrollIntoViewIfNeeded();
-    await form.getByPlaceholder("name@email.com").fill("reader@example.com");
-    await form.getByRole("button", { name: /subscribe/i }).click();
+    // Off-site, and to the profile rather than the custom domain the site now
+    // occupies — pointing it at memesandmarkets.com would be a link to this page.
+    await expect(cta).toHaveAttribute("href", /^https:\/\/substack\.com\/@/);
+    await expect(cta).toHaveAttribute("target", "_blank");
+    await expect(cta).toHaveAttribute("rel", /noopener/);
 
-    // "Gone over", not "subscribed" — the copy is not allowed to claim more than
-    // an opaque response supports.
-    await expect(page.getByText(/gone over/i)).toBeVisible();
-
-    expect(posts).toHaveLength(1);
-    const post = posts[0];
-    // Narrowing, not a second assertion: toHaveLength has already failed the test
-    // if this is missing, and tsc cannot see that.
-    if (!post) throw new Error("the signup sent nothing at all");
-    // A substack.com host, never the custom domain the site now occupies: that
-    // would post the signup straight back to this page.
-    expect(post.url).toMatch(/^https:\/\/[^/]+\.substack\.com\/api\/v1\/free$/);
-    // Form-encoded, NOT JSON. The safelisted content type is the only reason
-    // this request escapes the browser at all.
-    expect(post.contentType).toMatch(/^application\/x-www-form-urlencoded/);
-    expect(post.body).toContain("email=reader%40example.com");
-  });
-
-  /**
-   * The address check has to happen here, because it cannot happen anywhere else.
-   * Substack rejects a malformed address into an opaque response we cannot read,
-   * so anything that gets past this point is reported to the visitor as success.
-   */
-  test("a malformed address is refused before anything is sent", async ({ page }) => {
-    await page.goto("/");
-
-    let sent = 0;
-    await page.route("**/api/v1/free", async (route) => {
-      sent += 1;
-      await route.fulfill({ status: 200, body: "{}" });
-    });
-
-    const form = page.locator("footer form");
-    await form.scrollIntoViewIfNeeded();
-    await form.getByPlaceholder("name@email.com").fill("reader@example");
-    await form.getByRole("button", { name: /subscribe/i }).click();
-
-    await expect(page.getByText(/does not look like an email/i)).toBeVisible();
-    expect(sent).toBe(0);
+    // No form left behind to half-work.
+    await expect(page.locator("footer form")).toHaveCount(0);
   });
 
   test("does not scroll sideways at 390px", async ({ page }) => {
@@ -1139,8 +1095,10 @@ test.describe("careers", () => {
     page,
   }) => {
     await page.goto("/careers");
-    // Scoped to main: the newsletter box in the footer carries a honeypot of its
-    // own, by the same name and for the same reason.
+    // Scoped to main rather than the page. The footer has no form of its own
+    // today — the newsletter is a link out to Substack — but it has had one
+    // twice, each time carrying a honeypot by this same name, and an unscoped
+    // locator silently matches two the moment it comes back.
     const pot = page.locator('main input[name="company"]');
     await expect(pot).toHaveCount(1);
     await expect(pot).toBeHidden();

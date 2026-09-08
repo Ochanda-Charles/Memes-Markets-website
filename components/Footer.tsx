@@ -1,5 +1,5 @@
 import { CookieSettingsLink } from "@/components/ui/CookieSettingsLink";
-import { NewsletterForm } from "@/components/ui/NewsletterForm";
+import { NewsletterCta } from "@/components/ui/NewsletterCta";
 import { PlatformIcon } from "@/components/ui/PlatformIcon";
 import { DEVELOPER } from "@/content/credits";
 import {
@@ -167,7 +167,7 @@ export function Footer() {
               Straight from our Substack.
             </p>
           </div>
-          <NewsletterForm />
+          <NewsletterCta />
         </section>
 
         <hr style={{ borderColor: "var(--mm-border)" }} />
