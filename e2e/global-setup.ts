@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { parseRoles } from "@/lib/roles-sheet";
 import type { FullConfig } from "@playwright/test";
 
 /**
@@ -23,12 +25,27 @@ const ROUTES = [
   "/",
   "/about",
   "/partner",
+  "/careers",
   "/privacy",
   "/terms",
   // The API routes matter as much as the pages, and are easier to forget: an
   // uncompiled route pays its build cost inside whichever assertion reaches it
   // first, and the failure names the assertion rather than the route.
   "/api/live-status",
+  "/api/careers",
+  // Every role in the fixture, so /careers/[slug] is built before a test clicks
+  // into it. This one is derived rather than typed out: the slugs are whatever
+  // parseRoles makes of the fixture, and a list here that drifted from that
+  // would warm a 404 and look like it had worked.
+  //
+  // It earns its place. Without it the first test to click a role card paid the
+  // [slug] compile inside a 5s expect timeout, and lost — and because several
+  // workers were compiling at once, the test that lost was a different one each
+  // run. Two navigation tests that had nothing to do with careers failed too,
+  // which is exactly the misleading shape this file was written to prevent.
+  ...parseRoles(
+    JSON.parse(readFileSync(new URL("fixtures/roles.json", import.meta.url), "utf8")),
+  ).map((role) => `/careers/${role.slug}`),
 ];
 
 /** Roughly a minute. The server may still be booting when this starts. */

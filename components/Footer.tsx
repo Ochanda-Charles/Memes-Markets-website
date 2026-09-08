@@ -181,8 +181,14 @@ export function Footer() {
             {/* Text links rather than buttons, unlike About and Partner above.
                 These are the pages somebody goes looking for deliberately —
                 giving them the same weight as the two pages the site wants read
-                would say something untrue about what matters here. */}
+                would say something untrue about what matters here.
+                Careers sits here for that reason and not permanently: with
+                nothing open, a bordered CAREERS button beside About and Partner
+                would be advertising a job that does not exist. The day there is
+                a role worth shouting about, move this object up to the button
+                array and change the "two pages" note above it to three. */}
             {[
+              { href: "/careers", label: "Careers" },
               { href: "/privacy", label: "Privacy" },
               { href: "/terms", label: "Terms" },
             ].map((item) => (

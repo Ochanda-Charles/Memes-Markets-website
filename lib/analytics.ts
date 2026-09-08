@@ -29,7 +29,17 @@ export type AnalyticsEvent =
   /** An episode opened from the orbit rather than the list below it. */
   | "episode_open"
   /** Which press piece or guest appearance in the info panel got opened. */
-  | "press_click";
+  | "press_click"
+  /** An address handed to the newsletter box. NOT proof Substack accepted it. */
+  | "newsletter_signup"
+  /** A listing opened from the careers index. */
+  | "careers_role_open"
+  /**
+   * An application sent. Fired on the route answering ok, not on submit — so it
+   * counts applications that landed in the sheet rather than attempts. The
+   * partner form has no equivalent; that is a gap in it, not a precedent.
+   */
+  | "careers_apply";
 
 type Props = Record<string, string | number | boolean | undefined>;
 

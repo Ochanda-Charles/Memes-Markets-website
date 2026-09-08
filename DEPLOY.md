@@ -39,8 +39,10 @@ fine to deploy first and add them afterwards.
 | `FORCE_LIVE` | Preview only | Forces the player live for demos. Never set this in Production. |
 | `SUBSTACK_PUBLICATION_URL` | Production, Preview | Only if the newsletter moves off its current custom domain. |
 | `YOUTUBE_API_KEY` | Production, Preview | The audience numbers on the landing page. **Without it they never change** — see below. |
-| `PARTNER_SHEET_WEBHOOK` | Production, Preview | Apps Script `/exec` URL for partnership enquiries. Without it `/api/partner` answers 503 and points people at email. |
-| `PARTNER_SHEET_SECRET` | Production, Preview | Must match `SHARED_SECRET` in the Apps Script. |
+| `SHEET_WEBHOOK` | Production, Preview | Apps Script `/exec` URL. One deployment serves partnership enquiries, job applications and the careers listing. Without it `/api/partner` and `/api/careers` answer 503 and point people at email, and `/careers` renders from its committed fallback. |
+| `SHEET_SECRET` | Production, Preview | Must match `SHARED_SECRET` in the Apps Script. |
+| `PARTNER_SHEET_WEBHOOK` | — | Legacy alias for `SHEET_WEBHOOK`, still read. Existing deployments can leave it; new ones should not set it. See `lib/sheet.ts`. |
+| `PARTNER_SHEET_SECRET` | — | Legacy alias for `SHEET_SECRET`, still read. |
 | `NEXT_PUBLIC_GA_ID` | Production only | GA4 measurement id. Leave unset on Preview or staging traffic pollutes the numbers. |
 | `NEXT_PUBLIC_GSC_VERIFICATION` | Production only | Search Console meta-tag token. Unnecessary if you verify by DNS. |
 
@@ -160,9 +162,9 @@ and a `chore: refresh episode and channel-stat fallbacks` commit that actually
 touches `content/channel-stats-fallback.json`. A commit touching only
 `episodes-fallback.json` means the stats half is still skipping.
 
-## Partnership enquiries
+## The Google Sheet: enquiries, applications and job listings
 
-`scripts/partner-sheet.gs` carries the Apps Script and its setup, in the repo so
+`scripts/sheet-webhook.gs` carries the Apps Script and its setup, in the repo so
 the thing receiving enquiries is version-controlled next to the form that sends
 them. Roughly: create a sheet, paste the script, set `SHARED_SECRET`, deploy as
 a web app that "Anyone" can reach, then put the `/exec` URL and the same secret
@@ -172,6 +174,46 @@ into the two variables above.
 exactly why the secret exists. Editing the script later creates a *new* `/exec`
 URL unless you edit the existing deployment under **Manage deployments**; if
 enquiries stop arriving after a change, check that first.
+
+One deployment now does three jobs: partnership enquiries in, job applications
+(and their CVs) in, and the careers listings out. `lib/sheet.ts` resolves the URL
+and secret for all three, and still reads the older `PARTNER_SHEET_*` names as
+fallbacks so an existing deployment keeps working.
+
+## Careers
+
+Two things need doing beyond the sheet setup above, both covered step by step in
+the header of `scripts/sheet-webhook.gs`:
+
+1. **A Drive folder for the CVs.** Create it, copy its id out of the URL, and put
+   it in `CV_FOLDER_ID` inside the script. Share it with whoever does the hiring
+   and leave General access on **Restricted** — the script deliberately never
+   calls `setSharing`, so a file inherits the folder's privacy. "Anyone with the
+   link" on a folder of CVs is how somebody's home address ends up in a search
+   index. The id is not a Vercel variable on purpose: the site never touches
+   Drive, and putting it there would imply it does.
+2. **Re-authorise after adding Drive.** Run `authoriseMe` from the Apps Script
+   editor and accept the consent screen, *then* redeploy. Adding a permission
+   invalidates the previous authorisation, and a deployment running unauthorised
+   code fails on every write and says nothing.
+
+**Before trusting the CV path, prove Apps Script accepts the body.** Its incoming
+payload limit is undocumented, and a 2MB CV arrives base64-encoded at about
+2.8MB. Send a real one with curl and confirm the row and the file both appear.
+
+A deploy with no webhook set is a normal state, not a broken one: `/careers`
+renders from `content/roles-fallback.json`, which ships empty, so the page
+honestly says nothing is open. `/api/careers` answers 503 and points people at
+email.
+
+**Publishing a role** is a row on the `Roles` tab — no deploy. Status `Open`
+shows it, `Closed` leaves the page up with `noindex` and swaps in a speculative
+form, `Draft` hides it entirely and never leaves Google. A status the parser does
+not recognise is treated as `Draft`, so a typo hides a listing rather than
+publishing an unfinished one. Changes appear within five minutes.
+
+Run `npm run roles:refresh` when a listing goes up or comes down, so a sheet
+outage shows the roles rather than a blank page.
 
 ## The domain
 

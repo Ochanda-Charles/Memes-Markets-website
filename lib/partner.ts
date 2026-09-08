@@ -15,6 +15,7 @@
  * the site, and it sends the one audience the site most wants to impress —
  * sponsors — to a page that looks nothing like the show.
  */
+import { looksLikeEmail } from "./email";
 
 export const ENQUIRY_KINDS = [
   "Sponsorship",
@@ -45,16 +46,6 @@ export const LIMITS = {
   organisation: 160,
   message: 4_000,
 } as const;
-
-/**
- * Same loose test as the newsletter: one @, something either side, a dot in the
- * domain. Anything stricter turns valid addresses away, and there is nothing
- * downstream that can second-guess it here — unlike the newsletter, where
- * Substack does the real validation.
- */
-export function looksLikeEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
 
 function isKind(value: unknown): value is EnquiryKind {
   return ENQUIRY_KINDS.includes(value as EnquiryKind);

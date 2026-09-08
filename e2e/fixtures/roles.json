@@ -1,0 +1,39 @@
+{
+  "_comment": "The e2e fixture, loaded by playwright.config.ts into ROLES_FIXTURE. getRoles() runs on the server, so Playwright cannot intercept it — and content/roles-fallback.json ships EMPTY because the show is genuinely not hiring, which leaves the suite nothing to click on. These two roles are invented, and this is the only file in the repo where an invented listing is allowed: it never reaches a build. One Open and one Closed, because the closed-role page is its own behaviour worth testing.",
+  "roles": [
+    {
+      "slug": "",
+      "title": "Associate Producer",
+      "team": "Production",
+      "location": "London",
+      "remote": "Hybrid",
+      "type": "Full-time",
+      "compensation": "£38,000–£45,000",
+      "status": "Open",
+      "posted": "2026-09-01",
+      "closes": "",
+      "summary": "Cut the show, book the guests, and keep Tuesday from becoming Wednesday.",
+      "responsibilities": "Edit the live show into episodes\nBook and brief guests\nRun the clips schedule",
+      "requirements": "Two years in podcast or broadcast production\nA view about markets",
+      "niceToHave": "Premiere or Resolve",
+      "process": "A call with Keith\nA trial edit, paid"
+    },
+    {
+      "slug": "",
+      "title": "Clips Editor",
+      "team": "Growth",
+      "location": "Remote (UK & EU)",
+      "remote": "Remote",
+      "type": "Contract",
+      "compensation": "Day rate, negotiable",
+      "status": "Closed",
+      "posted": "2026-06-02",
+      "closes": "2026-07-31",
+      "summary": "Turned two live hours a week into short vertical video.",
+      "responsibilities": "Cut verticals from the live show",
+      "requirements": "A reel",
+      "niceToHave": "",
+      "process": "A call"
+    }
+  ]
+}

@@ -79,15 +79,16 @@ With the Sheet on Charles's personal account, those statements do not describe t
 actual arrangement, and a deletion request cannot be actioned without him. The
 options are to move the Sheet to a Memes & Markets Google account and redeploy the
 Apps Script (about fifteen minutes — the steps are in
-[`scripts/partner-sheet.gs`](scripts/partner-sheet.gs), and it produces a new
+[`scripts/sheet-webhook.gs`](scripts/sheet-webhook.gs), and it produces a new
 `PARTNER_SHEET_WEBHOOK` and `PARTNER_SHEET_SECRET`), or to reword the privacy page
 so it matches reality. Until one of those happens the page overstates the position.
 
 ### The developer credit stays
 
-[`content/credits.ts`](content/credits.ts) puts "Site by Ochanda Charles Otieno" in
-the footer, linking to his portfolio. It was there before handover and has been
-left in place deliberately rather than removed quietly.
+[`content/credits.ts`](content/credits.ts) puts "Site by Charles" in the footer,
+linking to his portfolio. It was there before handover and has been left in
+place deliberately rather than removed quietly. The first name is his own
+preference; the link still goes to the full site.
 
 It is a single object in one file — if Memes & Markets would rather it went, delete
 the block in `content/credits.ts` and the corresponding row in

@@ -1,5 +1,6 @@
 import { HOSTS, POSITIONING, SCHEDULE } from "@/content/platforms";
 import type { Episode } from "@/lib/episodes";
+import type { Role } from "@/lib/roles-sheet";
 import { siteUrl } from "@/lib/site";
 
 /**
@@ -61,16 +62,92 @@ export function aboutSchema() {
   };
 }
 
+/** schema.org's vocabulary for the employment types the sheet offers. */
+const EMPLOYMENT: Record<Role["employment"], string> = {
+  "Full-time": "FULL_TIME",
+  "Part-time": "PART_TIME",
+  Contract: "CONTRACTOR",
+  Freelance: "CONTRACTOR",
+  Internship: "INTERN",
+};
+
+/**
+ * A JobPosting, so an open role can appear in Google's job results.
+ *
+ * ONLY EVER CALLED FOR AN OPEN ROLE — see app/careers/[slug]/page.tsx. Google's
+ * job posting policy requires the markup to come off a listing that has stopped
+ * accepting applications, and leaving it on is a manual-action risk rather than
+ * merely untidy.
+ *
+ * `baseSalary` IS DELIBERATELY ABSENT, for the same reason numberOfEpisodes is
+ * absent above. The Compensation column is free text, because "Day rate,
+ * negotiable" is a legitimate thing for this show to be offering, and there is
+ * no honest way to turn that into the structured amount Google wants. A wrong
+ * salary in structured data is worse than no salary: it is the field candidates
+ * filter on, so being wrong there means being filtered out of searches you would
+ * have matched. Putting a range in search results is a real feature — Salary
+ * min, max, currency and unit columns in the sheet, and a QuantitativeValue
+ * here — not a coercion of the column that exists.
+ */
+export function jobPostingSchema(role: Role) {
+  const remote = role.remote === "Remote";
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    title: role.title,
+    description: role.summary,
+    url: `${siteUrl()}/careers/${role.slug}`,
+    // Accurate: the form is on the page, not behind a third-party applicant
+    // tracking system.
+    directApply: true,
+    employmentType: EMPLOYMENT[role.employment],
+    ...(role.team && { occupationalCategory: role.team }),
+    ...(role.posted && { datePosted: role.posted }),
+    ...(role.closes && { validThrough: role.closes }),
+    ...(remote
+      ? {
+          jobLocationType: "TELECOMMUTE",
+          ...(role.location && {
+            applicantLocationRequirements: { "@type": "Country", name: role.location },
+          }),
+        }
+      : role.location && {
+          jobLocation: {
+            "@type": "Place",
+            address: { "@type": "PostalAddress", addressLocality: role.location },
+          },
+        }),
+    hiringOrganization: {
+      "@type": "Organization",
+      name: "Memes & Markets",
+      url: siteUrl(),
+    },
+  };
+}
+
 /**
  * Rendered with dangerouslySetInnerHTML because JSON-LD must reach the DOM as a
  * raw script body; JSX would escape the quotes and Google would see nothing.
- * The input is our own structured data, never user input.
+ *
+ * THE PAYLOAD IS NOT ALL OURS ANY MORE, and the escaping below is what makes
+ * that safe. This used to carry only typed constants; jobPostingSchema now
+ * embeds a role's title, summary, team and location, which come from a Google
+ * Sheet that people other than the developer edit. The `<` replacement is
+ * therefore load-bearing rather than belt-and-braces: without it a title
+ * containing `</script>` closes this block early and whatever follows is parsed
+ * as HTML.
+ *
+ * Verified rather than assumed. A role titled
+ * `</script><img src=x onerror=alert(1)>` renders as `</script>...` inside
+ * a block that still parses as valid JSON, and injects no elements. Anyone
+ * tempted to drop the replace() should reproduce that first.
  */
 export function JsonLd({ data }: { data: object }) {
   return (
     <script
       type="application/ld+json"
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD must reach the DOM as a raw script body; the payload is our own typed data, and < is escaped below.
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD must reach the DOM as a raw script body; the payload includes sheet-authored role text, which the < escape below neutralises. See the note above.
       dangerouslySetInnerHTML={{
         __html: JSON.stringify(data).replace(/</g, "\\u003c"),
       }}

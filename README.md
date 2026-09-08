@@ -3,8 +3,11 @@
 Marketing site for the Memes & Markets podcast — hosted by Keith D and Ben Leavitt,
 live Tuesdays & Thursdays.
 
-Six routes: `/`, `/about`, `/partner`, `/privacy`, `/terms`, `/subscribed`. There is
-no nav bar; the wordmark is the header.
+Six routes: `/`, `/about`, `/partner`, `/careers`, `/privacy`, `/terms`, plus a page per
+open job listing at `/careers/<slug>`. There is no nav bar; the wordmark is the header.
+
+(`/subscribed` was in this list and is gone — it existed to catch a form post the
+newsletter no longer makes.)
 
 ## Quickstart
 
