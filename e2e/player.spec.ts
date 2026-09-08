@@ -1147,3 +1147,66 @@ test.describe("careers", () => {
     expect(response?.status()).toBe(404);
   });
 });
+
+/**
+ * Regressions found by /qa on 2026-09-08.
+ * Report: .gstack/qa-reports/qa-report-localhost-2026-09-08.md
+ */
+test.describe("careers — QA regressions", () => {
+  /**
+   * Regression: QA-001 — the content-length guard was bypassable.
+   *
+   * Content-length is client-supplied and optional. A chunked request omits it,
+   * `Number(null ?? 0) > MAX_BODY` is false, and the 413 never fired — the route
+   * then buffered the whole body. Playwright cannot force chunked encoding, so
+   * this asserts the outcome that matters either way: an oversized body is
+   * refused and nothing reaches the sheet.
+   */
+  test("an oversized body is refused however it is framed", async ({ request }) => {
+    const oversized = "A".repeat(4_000_000);
+    const res = await request.post("/api/careers", {
+      headers: { "content-type": "application/json" },
+      data: {
+        name: "Sam Rivera",
+        email: "sam@example.com",
+        message: "Test.",
+        consent: true,
+        roleSlug: "",
+        cv: { name: "huge.pdf", type: "application/pdf", data: oversized },
+      },
+    });
+    expect(res.status()).toBeGreaterThanOrEqual(400);
+    expect(res.status()).toBeLessThan(500);
+    expect((await res.json()).ok).toBeFalsy();
+  });
+
+  /**
+   * Regression: QA-002 — a blamed field was marked invalid with no way to reach
+   * the reason, and focus stayed on <body> after a failed submit.
+   *
+   * aria-invalid alone says "this is wrong" and nothing else. The live region
+   * announced the message once on submit and was then unreachable, so a screen
+   * reader user landed on an invalid field with no explanation, and a keyboard
+   * user had to hunt for which box it was.
+   */
+  test("a failed submit points the blamed field at its reason, and focuses it", async ({
+    page,
+  }) => {
+    await page.goto("/careers");
+    await page.getByLabel("Your name").fill("Sam Rivera");
+    await page.getByLabel("Email", { exact: true }).fill("sam@example.com");
+    await page.getByLabel(/linkedin/i).fill("https://example.com/sam");
+    await page.getByLabel(/what you do/i).fill("I cut daily shows.");
+    // Consent deliberately unticked.
+    await page.getByRole("button", { name: /send application/i }).click();
+
+    const consent = page.getByRole("checkbox");
+    await expect(consent).toHaveAttribute("aria-invalid", "true");
+    await expect(consent).toBeFocused();
+
+    // The reason must be reachable FROM the field, not just announced once.
+    const describedBy = await consent.getAttribute("aria-describedby");
+    expect(describedBy, "the blamed field should point at the status line").toBeTruthy();
+    await expect(page.locator(`#${describedBy}`)).toHaveText(/tick the box/i);
+  });
+});
