@@ -13,7 +13,12 @@
  * profiles, which is exactly where the click was aiming.
  */
 export const DEVELOPER = {
-  name: "Ochanda Charles Otieno",
+  /**
+   * First name only, by his own request. It reads as a person rather than a
+   * byline, which is the right weight for a credit sitting in a footer next to
+   * the legal links. The link still goes to the full portfolio.
+   */
+  name: "Charles",
   /**
    * The fragment is load-bearing — see above. Both the apex and www answer 200,
    * so this is the address as given rather than a guess at the canonical one.
