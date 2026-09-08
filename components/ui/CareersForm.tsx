@@ -185,9 +185,9 @@ export function CareersForm({
           {role
             ? `Your application for ${role.title} has landed.`
             : "Your application has landed."}{" "}
-          Keith and Ben read these themselves, so a reply comes from a person rather than
-          a queue. If you do not hear anything within a couple of weeks, it is fine to
-          chase us at {contactEmail}.
+          Thank you &mdash; we know these take real time to put together. Keith and Ben
+          read them themselves, and yours stays on file: when something opens up that fits
+          what you do, you will be considered for it.
         </p>
       </div>
     );
@@ -319,9 +319,13 @@ export function CareersForm({
           aria-invalid={bad("consent") || undefined}
           className="mt-1 size-4 shrink-0 accent-[var(--mm-accent)]"
         />
+        {/* The period is named here, and here only. It used to be stated a
+            second time under the button, which is where a person reads it and
+            nods; this is where they agree to it. Keep it equal to the twelve
+            months app/privacy/page.tsx promises. */}
         <span>
           I am happy for Memes &amp; Markets to keep this application, including my CV,
-          while they consider it.{" "}
+          for up to 12 months while they consider me.{" "}
           <a href="/privacy" className="underline underline-offset-4">
             What we do with it
           </a>
@@ -353,13 +357,19 @@ export function CareersForm({
               : "Send application"}
         </button>
 
+        {/* Empty until something goes wrong, but never removed from the tree.
+            It is the form's live region: a screen reader user presses Send and
+            is told the outcome because this element is already here to announce
+            it. Rendering it only on failure would announce nothing.
+
+            The twelve-month retention line used to sit here. It now lives where
+            it is agreed rather than merely stated — on the consent tick above,
+            which links to the privacy page carrying the full promise. */}
         <output
           className="type-mono-ticker-sm block"
           style={{ color: failed ? "var(--mm-accent)" : "var(--mm-text-3)" }}
         >
-          {failed
-            ? state.message
-            : "We keep applications for 12 months, then delete them. Ask sooner and we will."}
+          {failed ? state.message : ""}
         </output>
       </div>
 

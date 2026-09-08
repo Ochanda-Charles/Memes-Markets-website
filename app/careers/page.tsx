@@ -47,16 +47,15 @@ export default async function Careers() {
         <p className="type-mono-label" style={{ color: "var(--mm-accent)" }}>
           Careers
         </p>
-        <h1 className="type-display-lg mm-wordmark mt-4 text-balance">
-          Work on the show
-        </h1>
+        <h1 className="type-display-lg mm-wordmark mt-4 text-balance">Work with us</h1>
         <p
           className="type-body-lg mt-6 max-w-[62ch]"
           style={{ color: "var(--mm-text-2)" }}
         >
-          {POSITIONING}. {SCHEDULE}, live and unedited, hosted by {HOSTS}. It is a small
-          operation, which means whatever you do here you will be doing a lot of, and
-          nobody will be watching over your shoulder while you do it.
+          {POSITIONING}. {SCHEDULE}, live and unedited, hosted by {HOSTS}. The work around
+          it is creative and technical in equal measure &mdash; design and UI/UX, software
+          engineering, editing, content strategy. We are always looking for brilliant
+          people to do it, so do not wait for a job ad to go up. Shoot your shot.
         </p>
 
         <section aria-labelledby="open-roles-heading" className="mt-16">
