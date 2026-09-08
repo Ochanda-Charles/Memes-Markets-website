@@ -129,13 +129,25 @@ export function jobPostingSchema(role: Role) {
 /**
  * Rendered with dangerouslySetInnerHTML because JSON-LD must reach the DOM as a
  * raw script body; JSX would escape the quotes and Google would see nothing.
- * The input is our own structured data, never user input.
+ *
+ * THE PAYLOAD IS NOT ALL OURS ANY MORE, and the escaping below is what makes
+ * that safe. This used to carry only typed constants; jobPostingSchema now
+ * embeds a role's title, summary, team and location, which come from a Google
+ * Sheet that people other than the developer edit. The `<` replacement is
+ * therefore load-bearing rather than belt-and-braces: without it a title
+ * containing `</script>` closes this block early and whatever follows is parsed
+ * as HTML.
+ *
+ * Verified rather than assumed. A role titled
+ * `</script><img src=x onerror=alert(1)>` renders as `</script>...` inside
+ * a block that still parses as valid JSON, and injects no elements. Anyone
+ * tempted to drop the replace() should reproduce that first.
  */
 export function JsonLd({ data }: { data: object }) {
   return (
     <script
       type="application/ld+json"
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD must reach the DOM as a raw script body; the payload is our own typed data, and < is escaped below.
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD must reach the DOM as a raw script body; the payload includes sheet-authored role text, which the < escape below neutralises. See the note above.
       dangerouslySetInnerHTML={{
         __html: JSON.stringify(data).replace(/</g, "\\u003c"),
       }}
