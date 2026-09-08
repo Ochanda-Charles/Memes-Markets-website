@@ -91,8 +91,44 @@ describe("scripts/sheet-webhook.gs", () => {
    * somebody looking for a menu entry that is not there — which has happened.
    */
   it("defines every function the setup instructions name", () => {
-    for (const fn of ["doPost", "doGet", "findFolderId", "checkSetup", "authoriseMe"]) {
+    for (const fn of [
+      "doPost",
+      "doGet",
+      "setupRolesTab",
+      "findFolderId",
+      "checkSetup",
+      "authoriseMe",
+    ]) {
       expect(source, `${SCRIPT} should define ${fn}()`).toContain(`function ${fn}(`);
     }
+  });
+
+  /**
+   * ROLE_HEADERS writes the Roles tab; ROLE_COLUMNS reads it back, keyed on the
+   * lowercased header text. Nothing connects them at run time, and a header
+   * renamed in one and not the other does not error — it silently drops that
+   * column from every listing, so a salary or a location just stops appearing
+   * on the live site. This is the only thing holding the two together.
+   */
+  it("writes exactly the column headers it reads back", () => {
+    /** The body of a `const NAME = <open> ... <close>` declaration. */
+    const body = (name: string, open: string, close: string) => {
+      const after = source.split(`${name} = ${open}`)[1];
+      if (after === undefined) throw new Error(`${SCRIPT} no longer declares ${name}`);
+      const inner = after.split(close)[0];
+      if (inner === undefined) throw new Error(`${name} in ${SCRIPT} is unterminated`);
+      return inner;
+    };
+
+    const lower = (matches: RegExpMatchArray[]) =>
+      matches.map((m) => (m[1] ?? "").toLowerCase());
+
+    const written = lower([...body("ROLE_HEADERS", "[", "];").matchAll(/"([^"]+)"/g)]);
+    const read = lower([
+      ...body("ROLE_COLUMNS", "{", "};").matchAll(/^\s*"?([\w ]+?)"?:/gm),
+    ]);
+
+    expect(written).toHaveLength(15);
+    expect(written).toEqual(read);
   });
 });

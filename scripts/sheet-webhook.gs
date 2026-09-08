@@ -31,8 +31,11 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * SETUP — about ten minutes, once.
  *
- *  1. Create a Google Sheet. It needs three tabs, and this script will make any
- *     that are missing: `Enquiries`, `Applications`, `Roles`.
+ *  1. Create a Google Sheet. `Enquiries` and `Applications` appear on their own
+ *     the first time something is written to them. `Roles` does not, because it
+ *     is only ever read: run `setupRolesTab` once, after step 7, and it builds
+ *     the tab with the right headers and the dropdowns that stop a mistyped
+ *     Status quietly hiding a listing.
  *
  *  2. Make the folder the CVs go in. Open drive.google.com and create a folder —
  *     call it `Memes & Markets — CVs`. Open it. The address bar reads
@@ -77,8 +80,17 @@
  *     (The older PARTNER_SHEET_WEBHOOK / PARTNER_SHEET_SECRET names still work
  *     and can stay until somebody tidies them up. See lib/sheet.ts.) Redeploy.
  *
- *  9. Check it: paste `<your /exec URL>?list=roles` into a browser. You should
- *     see JSON listing your roles, with any Draft row absent.
+ *  9. Run `setupRolesTab` to build the Roles tab.
+ *
+ * 10. Check it: paste `<your /exec URL>?list=roles` into a browser. You should
+ *     see JSON listing your roles, with any Draft row absent. An empty list is
+ *     the right answer until a row has Status set to Open.
+ *
+ * ADDING A ROLE, once all of the above is done: fill in a row on the Roles tab,
+ * set Status to Open, and it is live within five minutes. No deploy, and nobody
+ * needs to touch this script again. Draft keeps a half-written listing private —
+ * drafts are filtered out here, before anything leaves Google. Closed leaves the
+ * page up for anyone holding the link, marked closed and out of Google's index.
  *
  * IF THINGS STOP ARRIVING AFTER YOU EDIT THIS FILE, check step 7 first and then
  * step 6. Adding a permission invalidates the previous authorisation, and a
@@ -311,6 +323,114 @@ const ROLE_COLUMNS = {
   "nice to have": "niceToHave",
   process: "process",
 };
+
+/**
+ * The Roles tab's header row, in order.
+ *
+ * Lowercased, these must be exactly the keys of ROLE_COLUMNS above — that is
+ * what readRoles matches on, and lib/sheet.test.ts fails if the two drift apart.
+ * A header renamed here and not there does not error; it silently drops that
+ * column from every listing, which is the sort of fault that reaches the site.
+ */
+var ROLE_HEADERS = [
+  "Slug",
+  "Title",
+  "Team",
+  "Location",
+  "Remote",
+  "Type",
+  "Compensation",
+  "Status",
+  "Posted",
+  "Closes",
+  "Summary",
+  "Responsibilities",
+  "Requirements",
+  "Nice to have",
+  "Process",
+];
+
+/**
+ * Build the Roles tab, or bring an existing one up to date. Run it once.
+ *
+ * WHY THIS IS NOT AUTOMATIC. Enquiries and Applications are created on their
+ * first write, because the script is holding the row that needs somewhere to
+ * go. Roles is only ever READ, so there is no moment at which the script can
+ * infer that a tab should exist — a missing one is indistinguishable from a
+ * sheet where nobody is hiring, and both correctly render an empty page.
+ *
+ * IT NEVER DELETES ANYTHING. On a tab that already has rows it leaves them
+ * alone and only refreshes the dropdowns, so it is safe to re-run.
+ *
+ * The dropdowns are the point of it. readRoles is deliberately unforgiving
+ * about Status — anything it does not recognise is treated as Draft, so the
+ * listing stays hidden rather than being published half-finished. That is the
+ * right failure, but it means a typo costs somebody a puzzled afternoon.
+ * Constraining the cell means the typo cannot be typed.
+ */
+function setupRolesTab() {
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = book.getSheetByName(ROLES_SHEET);
+  var created = false;
+
+  if (!sheet) {
+    sheet = book.insertSheet(ROLES_SHEET);
+    created = true;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(ROLE_HEADERS);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, ROLE_HEADERS.length).setFontWeight("bold");
+
+    // The four list columns hold one item per line, so the cells need to wrap
+    // or the tab is unreadable the moment a real description goes in.
+    var wrapped = ["Summary", "Responsibilities", "Requirements", "Nice to have", "Process"];
+    for (var w = 0; w < wrapped.length; w++) {
+      var col = ROLE_HEADERS.indexOf(wrapped[w]) + 1;
+      sheet.getRange(2, col, sheet.getMaxRows() - 1).setWrap(true);
+      sheet.setColumnWidth(col, 320);
+    }
+  }
+
+  // Idempotent, and applied whether or not the tab is new: a sheet somebody
+  // built by hand before this function existed gets the dropdowns too.
+  applyRoleDropdown(sheet, "Remote", ["Remote", "Hybrid", "On-site"]);
+  applyRoleDropdown(sheet, "Type", [
+    "Full-time",
+    "Part-time",
+    "Contract",
+    "Freelance",
+    "Internship",
+  ]);
+  applyRoleDropdown(sheet, "Status", ["Open", "Closed", "Draft"]);
+
+  Logger.log(created ? "Created the Roles tab." : "Roles tab already existed; left its rows alone.");
+  Logger.log("Dropdowns set on Remote, Type and Status.");
+  Logger.log("");
+  Logger.log("To publish a role: fill in a row, set Status to Open, and the site");
+  Logger.log("picks it up within five minutes. Draft hides it and never leaves Google.");
+  Logger.log("Title is the only column that is genuinely required.");
+}
+
+/**
+ * Constrain one column to a list, rejecting anything else.
+ *
+ * setAllowInvalid(false) rather than a warning triangle: a value the sheet
+ * merely grumbles about is still a value readRoles will fall back to Draft on,
+ * and the person who typed it has already moved on.
+ */
+function applyRoleDropdown(sheet, header, values) {
+  var col = ROLE_HEADERS.indexOf(header) + 1;
+  if (col === 0) return;
+
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(values, true)
+    .setAllowInvalid(false)
+    .build();
+
+  sheet.getRange(2, col, sheet.getMaxRows() - 1).setDataValidation(rule);
+}
 
 /**
  * A GET is either somebody checking the deployment is alive, or the site asking
