@@ -169,6 +169,26 @@ nobody asked for was the wrong trade.
 - [ ] Decide whose Google account owns the CV folder — the files land in that
       account's personal 15GB, alongside its Gmail.
 
+## Found by /qa 2026-09-08, not fixed
+- [ ] **PartnerForm has the same accessibility gap the careers form just lost.**
+      A failed submit marks the field `aria-invalid` but nothing points
+      `aria-describedby` at the message, and focus stays on `<body>`. The live
+      region announces once and is then unreachable. Fixed in `CareersForm`
+      (QA-002); `PartnerForm` was left alone deliberately as pre-existing and
+      outside that branch. Same three changes apply: id on the `<output>`, a
+      `describedBy` helper, a focus effect.
+- [ ] **`/api/careers` is an unauthenticated upload into a personal Drive.**
+      Not a bug — the consequence of choices already made, written down so it
+      is a decision rather than a surprise. The origin check lets a missing
+      `Origin` through (correct for non-browser clients, and therefore no
+      obstacle to a script), and `lib/rate-limit.ts` is per-isolate and says so.
+      15GB at a 2MB cap is about 7,500 uploads to fill the account that also
+      holds the owner's Gmail; Apps Script's ~90 min/day runtime is the other
+      ceiling, and exhausting it takes `/careers` down to its fallback. Fine
+      while nobody knows the endpoint exists. Revisit when a listing is
+      publicised — shared-state rate limiting (Vercel KV/Upstash) is the first
+      move, and rate-limit.ts is written to be the only file that changes.
+
 ## Deferred / not in scope
 - YouTube Data API — RSS covers 15 episodes with no key; only needed for view counts
 - Market ticker — removed from the design, `ticker/row` component left unused in Figma
