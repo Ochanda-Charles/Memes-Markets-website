@@ -2,7 +2,7 @@
 
 import { track } from "@/lib/analytics";
 import { CV_TYPES, LIMITS } from "@/lib/careers";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 type State =
   | { status: "idle" }
@@ -42,6 +42,25 @@ export function CareersForm({
 }) {
   const id = useId();
   const [state, setState] = useState<State>({ status: "idle" });
+  const statusId = `${id}-status`;
+
+  /**
+   * Send focus to the field the server blamed.
+   *
+   * Without this, a failed submit leaves focus on <body>. A sighted person sees
+   * the red line beside the button; somebody on a keyboard has to tab back
+   * through the whole form to find which box is wrong, and a screen reader user
+   * hears the live region once and then has to hunt for it. Running in an
+   * effect rather than inline is deliberate: the field has to exist in the DOM
+   * with its new aria-invalid before it is focused.
+   *
+   * `role` is a legitimate miss — the slug is not a field on the form — so an
+   * absent element is a no-op rather than an error.
+   */
+  useEffect(() => {
+    if (state.status !== "failed" || !state.field) return;
+    document.getElementById(`${id}-${state.field}`)?.focus();
+  }, [state, id]);
   // The File itself, not its name: <input type="file"> cannot be re-populated
   // programmatically, so the component has to hold the thing it read.
   const [cv, setCv] = useState<File | null>(null);
@@ -203,6 +222,18 @@ export function CareersForm({
     color: "var(--mm-text)",
   });
 
+  /**
+   * Point a blamed field at the message that blames it.
+   *
+   * aria-invalid alone says "this is wrong" and nothing else, so a screen
+   * reader user lands on a field marked invalid with no way to reach the reason
+   * — the live region announced it once, on submit, and is gone. Describing the
+   * field by the status line means the reason is available whenever the field
+   * is. `extra` keeps a field's own permanent hint, which the CV input has.
+   */
+  const describedBy = (field: string, extra?: string) =>
+    [bad(field) ? statusId : null, extra].filter(Boolean).join(" ") || undefined;
+
   return (
     <form onSubmit={onSubmit} noValidate>
       <div className="grid gap-5 sm:grid-cols-2">
@@ -214,6 +245,7 @@ export function CareersForm({
             maxLength={LIMITS.name}
             autoComplete="name"
             aria-invalid={bad("name") || undefined}
+            aria-describedby={describedBy("name")}
             className="type-body-md w-full rounded-[10px] border px-4 py-3"
             style={fieldStyle("name")}
           />
@@ -228,6 +260,7 @@ export function CareersForm({
             maxLength={LIMITS.email}
             autoComplete="email"
             aria-invalid={bad("email") || undefined}
+            aria-describedby={describedBy("email")}
             className="type-body-md w-full rounded-[10px] border px-4 py-3"
             style={fieldStyle("email")}
           />
@@ -242,6 +275,7 @@ export function CareersForm({
             maxLength={LIMITS.location}
             autoComplete="address-level2"
             aria-invalid={bad("location") || undefined}
+            aria-describedby={describedBy("location")}
             className="type-body-md w-full rounded-[10px] border px-4 py-3"
             style={fieldStyle("location")}
           />
@@ -256,6 +290,7 @@ export function CareersForm({
             maxLength={LIMITS.link}
             placeholder="https://"
             aria-invalid={bad("link") || undefined}
+            aria-describedby={describedBy("link")}
             className="type-body-md w-full rounded-[10px] border px-4 py-3"
             style={fieldStyle("link")}
           />
@@ -271,7 +306,7 @@ export function CareersForm({
             accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={onFile}
             aria-invalid={bad("cv") || undefined}
-            aria-describedby={`${id}-cv-note`}
+            aria-describedby={describedBy("cv", `${id}-cv-note`)}
             className="type-body-md w-full cursor-pointer rounded-[10px] border px-4 py-3 file:mr-4 file:cursor-pointer file:rounded-[6px] file:border-0 file:bg-[var(--mm-surface-raised)] file:px-3 file:py-1.5 file:text-[var(--mm-text)] file:uppercase"
             style={fieldStyle("cv")}
           />
@@ -295,6 +330,7 @@ export function CareersForm({
             rows={6}
             maxLength={LIMITS.message}
             aria-invalid={bad("message") || undefined}
+            aria-describedby={describedBy("message")}
             placeholder={
               role
                 ? "Why this one, and what you would bring to it."
@@ -317,6 +353,7 @@ export function CareersForm({
           type="checkbox"
           required
           aria-invalid={bad("consent") || undefined}
+          aria-describedby={describedBy("consent")}
           className="mt-1 size-4 shrink-0 accent-[var(--mm-accent)]"
         />
         {/* The period is named here, and here only. It used to be stated a
@@ -366,6 +403,7 @@ export function CareersForm({
             it is agreed rather than merely stated — on the consent tick above,
             which links to the privacy page carrying the full promise. */}
         <output
+          id={statusId}
           className="type-mono-ticker-sm block"
           style={{ color: failed ? "var(--mm-accent)" : "var(--mm-text-3)" }}
         >
